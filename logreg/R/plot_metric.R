@@ -4,7 +4,7 @@
 #' @param pred A \code{matrix}(numeric) containing variables that will be used to predict the response.
 #' @param resp A \code{vector}(numeric) containing values that represent a response variable.
 #' @param metric This can be any of the following metrics: "Prevalence", "Accuracy","Sensitivity", "Specificity", "False Discovery Rate","Diagnostic Odds Ratio"
-#' @return A \code{plot} that shows
+#' @return A \code{plot} that shows the entered metric over a grid of cut-off values for prediction going from 0.1 to 0.9 with steps of 0.1.
 #' @author Yizhong Zhang, Alexander Miller
 #' @importFrom
 #' @export

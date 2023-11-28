@@ -9,7 +9,7 @@ Description: This package implements logistic regression using numerical optimiz
     -obtain the least squares estimators. This is used as a starting point for optimization
     -bootstrap confidence intervals for each predictor in the logistic regression
     -plot the fitted logistic curve to the responses
-    -obtain a confusion matrix on the logostic regression and print metrics calculated from the matrix
+    -obtain a confusion matrix on the logistic regression and print metrics calculated from the matrix
     -have the ability to plot the given metrics from 0.1 to 0.9
 License: GNU General Public License
 Encoding: UTF-8
