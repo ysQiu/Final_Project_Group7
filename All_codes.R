@@ -152,7 +152,7 @@ log_plot <- function(pred, resp){
   plot(whole[,(c-1)] ~ whole[,c])
   aaa <- cbind(whole[,c] , whole[,(c-1)])
   aaa <- as.data.frame(aaa)
-  plot(aaa[,2]~aaa[,1], xlab="fitted value y_hat"
+  plot(aaa[,2]~aaa[,1], xlab="X%*%Beta"
        , ylab="binary response y")
   logistic_model <- glm(aaa[,2]~aaa[,1], data=aaa, 
                         family=binomial)
