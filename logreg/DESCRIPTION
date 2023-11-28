@@ -1,0 +1,17 @@
+Package: logreg
+Type: Package
+Title: Logistic Regression
+Version: 0.1.0
+Author: c(person("Alexander", "Miller", role = "aut"),
+        person("Yizhong", "Zhang", role = "aut")
+Maintainer: Alexander Miller <akm0120@auburn.edu>
+Description: This package implements logistic regression using numerical optimization. The functions in this package allow for you to:
+    -obtain the least squares estimators. This is used as a starting point for optimization
+    -bootstrap confidence intervals for each predictor in the logistic regression
+    -plot the fitted logistic curve to the responses
+    -obtain a confusion matrix on the logostic regression and print metrics calculated from the matrix
+    -have the ability to plot the given metrics from 0.1 to 0.9
+License: GNU General Public License
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.3
