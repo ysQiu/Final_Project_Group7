@@ -1,0 +1,533 @@
+---
+title: "Final Project"
+author: "Sk Nafiz Rahaman, Shakiru Oluwasanjo Oyeniran, Yingshan Qiu"
+date: "2023-11-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The xxx package is based on the procedure of logistic regression.
+
+## Data Pre-Processing
+
+In this section, we use the dataset which collects information on beneficiaries, including smoking status of each beneficiary, and some other personal information including age, sex, body mass index, number of children, residential area and medical costs billed by the health insurance companies. Our aim is to use these personal information to fit the model of estimating a beneficiary smoking or not.
+
+```{r}
+mydata <- read.csv("expenses.csv")
+head(mydata)
+```
+
+Importantly, we need to transfer our data into a numeric matrix. This step is very important! Or the function behind will not work! The format must be numeric matrix! List or data frame will not make these functions work!
+
+```{r}
+mydata$sex <- factor(mydata$sex, 
+                     levels = c("male","female"), labels = c(0,1))
+mydata$smoker <- factor(mydata$smoker, levels = c("yes","no"), labels = c(1,0))
+mydata$region_northeast <- ifelse(mydata$region=="northeast",1,0)
+mydata$region_northwest <- ifelse(mydata$region=="northwest",1,0)
+mydata$region_southeast <- ifelse(mydata$region=="southeast",1,0)
+mydata <- mydata[,-6]
+names <- colnames(mydata)
+
+mydata <- as.matrix(mydata)
+mydata <- as.numeric(mydata)
+class(mydata)
+summary(mydata)
+mydata <- matrix(mydata, ncol=9)
+
+#X: predictor variables
+X <- mydata[, c(1:4,6:9)]
+colnames(X) <- names[c(1:4,6:9)]
+
+#Y: response variable (smoke or not)
+Y <- mydata[, 5]
+```
+
+
+## Logistic Regression
+
+The formula of losgistic regression based on response variable y and predictor variables $X_1$, $X_2$, ... $X_k$ is
+
+
+$$
+\hat{y} = \frac{1}{1+e^{-(\beta_0+\beta_1x_1+\cdots+\beta_kx_k)}}=\frac{1}{1+e^{-x^T\beta}}
+$$
+The best estimator of the coefficient vector $\beta$ is computed with the least value of loss function of logistic regression, and the numerical optimization process is shown in the following:
+
+$$
+\hat{\beta}=\mathop{\arg\min}\limits_{\beta}\sum_{i=1}^n (-y_i\cdot \text{ln}(p_i)-(1-y_i)\cdot \text{ln}(1-p_i))
+$$
+where 
+$$
+pi=\frac{1}{1+\text{exp}(-x_i^T\beta)},
+$$
+and $y_i$ and $x_i$ represent the ith observation and row of the response and the predictors respectively.
+
+#### Initial values for optimization 
+
+In order to start an optimization process, we need to define a initial value of coefficient matrix. In order to get the estimator more accurately, we use the least-square estimator as the initial matrix of coefficient.Now we create a function `init` which can get our initial values of beta:
+
+```{r}
+init <- function(resp, pred){
+  a <- nrow(pred)
+  c <- rep(1, nrow(pred))
+  x_mat <- as.matrix(cbind(c, pred))
+  beta_vec <- solve(t(x_mat)
+                    %*%(x_mat))%*%t(x_mat)%*%resp
+  return(beta_vec)
+}
+```
+
+```{r}
+init_beta_demo <- init(resp = Y, pred= X) 
+```
+
+Then, we need construct a function of loss value. The function name would be `loss_value`:
+
+```{r}
+loss_value <- function(pred, resp, beta){
+  a <- nrow(pred)
+  c <- rep(1,a)
+  x_mat <- cbind(c, pred)
+  d <- rep(0,a)
+  for(i in 1:a){
+    d[i] <- x_mat[i,]%*%beta
+  }
+  loss <- rep(0,a)
+  for(i in 1:a){
+    loss[i] <- ((-resp[i])*log(1/(1+exp(-d[i])))-(1-resp[i])*log(exp(-d[i])/(1+exp(-d[i]))))
+  }
+  return(sum(loss))
+}
+```
+
+```{r}
+loss_value_demo <- loss_value(pred= X,resp= Y, beta=init_beta_demo)
+```
+
+Now,we create a function to get a demo estimate for the optimal beta. The function name would be `optim_beta`:
+
+```{r}
+optim_beta <- function(init_coef, pred, resp){
+  par <- optim(init_coef, 
+               fn=loss_value,
+               pred= X,
+               resp= Y)$par
+  return(par)
+}
+```
+
+```{r}
+optim_beta_demo <- optim_beta(init_coef=init_beta_demo, pred= X, resp= Y)
+```
+
+As we can see, in this demo, we would get a vector of 9 elements, these values would be the best estimators of beta which could get the minimum value of the loss function.
+
+#### Bootstrap Confidence intervals
+
+Now we create a function that get the Bootstrap Confidence intervals of beta. The default value of n is 20, which is the number of Bootstraps. The default value of alpha is 0.05, which is the value of significance level. The function name would be `Boot_CI`:
+
+```{r}
+Boot_CI <- function(n=20, alpha=0.05, pred, resp){
+  whole <- cbind(pred, resp)
+  a <- nrow(pred)
+  c <- ncol(pred)+1
+  b <- matrix(0, nrow=n, ncol=c)
+  for (i in 1:n){
+    whole_star <- whole[sample(1:a, replace = TRUE),]
+    init_beta <- init(resp = whole[,c], 
+                      pred= whole[, -c]) 
+    b[i,] <- optim(init_beta, fn=loss_value, 
+                   pred=whole_star[, -c],
+                   resp=whole_star[,c])$par
+  }
+  final <- matrix(0, nrow = c, ncol=2)
+  for(i in 1:c){
+    final[i,] <- quantile(b[,i], c(alpha/2, 1 - alpha/2))
+  }
+  return(final)
+}
+```
+
+```{r}
+Boot_CI_demo <- Boot_CI(n=20, alpha=0.05, pred= X, resp= Y)
+```
+
+As we can see, in this sample, we get a matrix of 9*2, the row represents the estimate values from beta_0 to beta_8, the columns represents the upper_bound and lower bound of each estimated beta. In this demo, the number of Bootstraps is 20 and the significance level is 0.05.
+
+#### Drawing a fitted plot of logistic regression
+We would create a function which would draw the fitted logistic curve to the responses. The y-axis is the binary response y. The x-axis represents a sequence of values from the range of fitted value $\hat{y}= x^T \beta$. The function name is `log_plot`.
+
+```{r}
+log_plot <- function(pred, resp){
+  b <- rep(0, nrow(pred))
+  whole <- cbind(pred, resp, b)
+  c <- ncol(whole)
+  # get the start value of beta
+  
+  h <- rep(1, nrow(pred))
+  x_mat <- cbind(c, pred)
+  init_beta <- solve(t(x_mat)
+                     %*%(x_mat))%*%t(x_mat)%*%resp
+  
+  optim_beta_demo <- optim(init_beta, 
+                           fn=loss_value,
+                           pred=whole[,c(1:(c-2))],
+                           resp=whole[,(c-1)])$par
+  
+  whole[,c] <- x_mat %*% optim_beta_demo
+  whole <- whole[order(whole[,c]),]
+  plot(whole[,(c-1)] ~ whole[,c])
+  aaa <- cbind(whole[,c] , whole[,(c-1)])
+  aaa <- as.data.frame(aaa)
+  plot(aaa[,2]~aaa[,1], xlab="X%*%Beta"
+       , ylab="binary response y")
+  logistic_model <- glm(aaa[,2]~aaa[,1], data=aaa, 
+                        family=binomial)
+  Predicted_data <- data.frame(var2=seq(
+    min(aaa[,1]), max(aaa[,1]),len=nrow(pred)))
+  Predicted_data$var1 = predict(
+    logistic_model, Predicted_data, type="response")
+  lines(var1 ~ var2, Predicted_data, lwd=2, col="green")
+}
+```
+
+```{r}
+# Example
+log_plot(pred= X, resp= Y)
+```
+
+Therefore, we get a plot of fitted logistic curve to the response.
+
+## Confusion Matrix
+
+Confusion matrix is a specific table layout that allows visualization of the performance of an algorithm. Each row of the matrix represents the instances in an actual class while each column represents the instances in a predicted class.
+
+The template for any binary confusion matrix uses the four kinds of results (true positives, false negatives, false positives, and true negatives) along with the positive and negative classifications. The four outcomes can be formulated in a confusion matrix, as follows:
+
+| Total | Predicted Positive (PP) | Predicted Negative (PN) |
+|---|---|---|
+| Actual Positive (P) | True Positive (TP) | False Negative (FN) |
+| Actual Negative (N) | False Positive (FP) | True Negative (TN) |
+
+Based on the confusion matrix, we can compute the following metrics:
+$$
+\begin{align}
+&\text{Prevalence}=\frac{\text{P}}{\text{P}+\text{N}}\\
+&\text{Accuracy (ACC)}=\frac{\text{TP}+\text{TN}}{\text{P}+\text{N}}=\frac{\text{TP}+\text{TN}}{\text{TP}+\text{TN}+\text{FP}+\text{FN}}\\
+&\text{Sensitivity (TPR)}=\frac{\text{TP}}{\text{P}}=\frac{\text{TP}}{\text{TP}+\text{FN}}\\
+&\text{Specificity (TNR)}=\frac{\text{TN}}{\text{N}}=\frac{\text{TN}}{\text{TN}+\text{FP}}\\
+&\text{False Discovery Rate (FDR)}=\frac{\text{FP}}{\text{FP}+\text{TP}}\\
+&\text{Diagnostic Odds Ratio (DOR)}=\frac{\text{LR}_+}{\text{LR}_-}=\frac{\text{TPR}/\text{FPR}}{\text{FNR}/\text{TNR}}
+\end{align}
+$$
+
+#### Generating the confusion matrix of logistic regression
+
+The function name is `conf_mat`.
+
+```{r}
+conf_mat <- function(pred, resp){
+  b <- rep(0, nrow(pred))
+  whole <- cbind(pred, resp, b)
+  c <- ncol(whole)
+  # get the start value of beta
+  
+  h <- rep(1, nrow(pred))
+  x_mat <- cbind(c, pred)
+  init_beta <- solve(t(x_mat)
+                     %*%(x_mat))%*%t(x_mat)%*%resp
+  
+  optim_beta_demo <- optim(init_beta, 
+                           fn=loss_value, pred=whole[,c(1:(c-2))], resp=whole[,(c-1)])$par
+  
+  whole[,c] <- (1+exp(-x_mat %*% optim_beta_demo))^(-1)
+  whole <- whole[order(whole[,c]),]
+  aaa <- cbind(whole[,c] , whole[,(c-1)])
+  
+  #Create the confusion matrix
+  confusion <- matrix(rep(0,9),3,3)
+  for(i in 1:nrow(pred)){
+    if(aaa[i,1] >= 0.5 & aaa[i,2]==1){
+      confusion[2,2] <- confusion[2,2]+1
+    }else if(aaa[i,1] < 0.5 & aaa[i,2]==1){
+      confusion[2,3] <- confusion[2,3]+1
+    }else if(aaa[i,1] > 0.5 & aaa[i,2]==0){
+      confusion[3,2] <- confusion[3,2]+1
+    }else{
+      confusion[3,3] <- confusion[3,3]+1
+    }
+  }
+  confusion[1,1] <- (confusion[2,2]+confusion[2,3]
+                     +confusion[3,2]+confusion[3,3])
+  confusion[1,2] <- (confusion[2,2]+confusion[3,2])
+  confusion[1,3] <- (confusion[2,3]+confusion[3,3])
+  confusion[2,1] <- (confusion[2,2]+confusion[2,3])
+  confusion[3,1] <- (confusion[3,2]+confusion[3,3])
+  
+  colnames(confusion) <- c("Total","Predicted Yes","Predicted Yes")
+  rownames(confusion) <- c("Total","Actual Yes","Actual Yes")
+  
+  #Print such metrics
+  Prevalence <- confusion[2,1]/confusion[1,1]
+  cat(sprintf("The Prevalence is %f\n", Prevalence))
+  Accuracy <- (confusion[2,2]+confusion[3,3])/confusion[1,1]
+  cat(sprintf("The Accuracy is %f\n", Accuracy))
+  Sensitivity <- confusion[2,2]/confusion[2,1]
+  cat(sprintf("The Sensitivity is %f\n", Sensitivity))
+  Specificity <- confusion[3,3]/confusion[3,1]
+  cat(sprintf("The Specificity is %f\n", Specificity))
+  False_Discovery_Rate <- confusion[3,2]/(confusion[3,2]+confusion[2,2])
+  cat(sprintf("The False Discovery Rate is %f\n", False_Discovery_Rate))
+  LR_plus <- (confusion[2,2]/confusion[2,1])/(confusion[3,2]/confusion[3,1])
+  LR_minus <- (confusion[2,3]/confusion[2,1])/(confusion[3,3]/confusion[3,1])
+  Diagnostic_Odds_Ratio <- LR_plus/LR_minus
+  cat(sprintf("The Diagnostic Odds Ratio is %f\n", Diagnostic_Odds_Ratio))
+  
+  return(confusion)
+}
+```
+
+```{r}
+# Example
+confusion_matrix_demo <- conf_mat(pred=X, resp=Y)
+# Confusion Matrix
+confusion_matrix_demo
+```
+As we see, the confusion matrix is a 3*3 matrix, and we also out put the metrics of Prevalence, Accuracy, Sensitivity, Specificity, False Discovery Rate and Diagnostic Odds Ratio.
+
+#### Plots of any of metrics based on different cut-off values from 0.1 to 0.9 with steps of 0.1
+
+In order to solve this problem, we need to calculate all the 9 situations with the different cut-off values. This would be a comprehensive work. We need an array to store our 9 confusion matrix and print all the metrics in all the situations of different cut-off values. The function name is `compre_cal`.
+
+Firstly, we could create a new function where users could select cut-off values freely, The function name is `conf_mat_free`, compared to the function `conf_mat`.
+
+```{r}
+conf_mat_free <- function(pred, resp, value){
+  b <- rep(0, nrow(pred))
+  whole <- cbind(pred, resp, b)
+  c <- ncol(whole)
+  # get the start value of beta
+  
+  h <- rep(1, nrow(pred))
+  x_mat <- cbind(c, pred)
+  init_beta <- solve(t(x_mat)
+                     %*%(x_mat))%*%t(x_mat)%*%resp
+  
+  optim_beta_demo <- optim(init_beta, 
+                           fn=loss_value, pred=whole[,c(1:(c-2))], resp=whole[,(c-1)])$par
+  
+  whole[,c] <- (1+exp(-x_mat %*% optim_beta_demo))^(-1)
+  whole <- whole[order(whole[,c]),]
+  aaa <- cbind(whole[,c] , whole[,(c-1)])
+  
+  #Create the confusion matrix
+  confusion <- matrix(rep(0,9),3,3)
+  for(i in 1:nrow(pred)){
+    if(aaa[i,1] >= value & aaa[i,2]==1){
+      confusion[2,2] <- confusion[2,2]+1
+    }else if(aaa[i,1] < value & aaa[i,2]==1){
+      confusion[2,3] <- confusion[2,3]+1
+    }else if(aaa[i,1] > value & aaa[i,2]==0){
+      confusion[3,2] <- confusion[3,2]+1
+    }else{
+      confusion[3,3] <- confusion[3,3]+1
+    }
+  }
+  confusion[1,1] <- (confusion[2,2]+confusion[2,3]
+                     +confusion[3,2]+confusion[3,3])
+  confusion[1,2] <- (confusion[2,2]+confusion[3,2])
+  confusion[1,3] <- (confusion[2,3]+confusion[3,3])
+  confusion[2,1] <- (confusion[2,2]+confusion[2,3])
+  confusion[3,1] <- (confusion[3,2]+confusion[3,3])
+  
+  colnames(confusion) <- c("Total","Predicted Yes","Predicted Yes")
+  rownames(confusion) <- c("Total","Actual Yes","Actual Yes")
+  
+  #Print such metrics
+  cat(sprintf("When cut-off value is %f:\n", value))
+  Prevalence <- confusion[2,1]/confusion[1,1]
+  cat(sprintf("The Prevalence is %f\n", Prevalence))
+  Accuracy <- (confusion[2,2]+confusion[3,3])/confusion[1,1]
+  cat(sprintf("The Accuracy is %f\n", Accuracy))
+  Sensitivity <- confusion[2,2]/confusion[2,1]
+  cat(sprintf("The Sensitivity is %f\n", Sensitivity))
+  Specificity <- confusion[3,3]/confusion[3,1]
+  cat(sprintf("The Specificity is %f\n", Specificity))
+  False_Discovery_Rate <- confusion[3,2]/(confusion[3,2]+confusion[2,2])
+  cat(sprintf("The False Discovery Rate is %f\n", False_Discovery_Rate))
+  LR_plus <- (confusion[2,2]/confusion[2,1])/(confusion[3,2]/confusion[3,1])
+  LR_minus <- (confusion[2,3]/confusion[2,1])/(confusion[3,3]/confusion[3,1])
+  Diagnostic_Odds_Ratio <- LR_plus/LR_minus
+  cat(sprintf("The Diagnostic Odds Ratio is %f\n", Diagnostic_Odds_Ratio))
+  
+  return(confusion)
+}
+```
+
+```{r}
+# Example
+confusion_matrix_demo2 <- conf_mat_free(pred=X, resp=Y, value = 0.8)
+confusion_matrix_demo2
+```
+
+As we can see, we see when cut-off value is 0.8, we get a matrix of confusion_matrix_demo2 which is a 3*3 matrix and print all the metrics when cut-off value is 0.8.
+
+This function is same as `conf_mat_free` function but does not print out anything.
+
+```{r}
+conf_mat_new <- function(pred, resp, value){
+  b <- rep(0, nrow(pred))
+  whole <- cbind(pred, resp, b)
+  c <- ncol(whole)
+  # get the start value of beta
+  
+  h <- rep(1, nrow(pred))
+  x_mat <- cbind(c, pred)
+  init_beta <- solve(t(x_mat)
+                     %*%(x_mat))%*%t(x_mat)%*%resp
+  
+  optim_beta_demo <- optim(init_beta, 
+                           fn=loss_value, pred=whole[,c(1:(c-2))], resp=whole[,(c-1)])$par
+  
+  whole[,c] <- (1+exp(-x_mat %*% optim_beta_demo))^(-1)
+  whole <- whole[order(whole[,c]),]
+  aaa <- cbind(whole[,c] , whole[,(c-1)])
+  
+  #Create the confusion matrix
+  confusion <- matrix(rep(0,9),3,3)
+  for(i in 1:nrow(pred)){
+    if(aaa[i,1] >= value & aaa[i,2]==1){
+      confusion[2,2] <- confusion[2,2]+1
+    }else if(aaa[i,1] < value & aaa[i,2]==1){
+      confusion[2,3] <- confusion[2,3]+1
+    }else if(aaa[i,1] > value & aaa[i,2]==0){
+      confusion[3,2] <- confusion[3,2]+1
+    }else{
+      confusion[3,3] <- confusion[3,3]+1
+    }
+  }
+  confusion[1,1] <- (confusion[2,2]+confusion[2,3]
+                     +confusion[3,2]+confusion[3,3])
+  confusion[1,2] <- (confusion[2,2]+confusion[3,2])
+  confusion[1,3] <- (confusion[2,3]+confusion[3,3])
+  confusion[2,1] <- (confusion[2,2]+confusion[2,3])
+  confusion[3,1] <- (confusion[3,2]+confusion[3,3])
+  colnames(confusion) <- c("Total","Predicted Yes","Predicted Yes")
+  rownames(confusion) <- c("Total","Actual Yes","Actual Yes")
+  return(confusion)
+}
+```
+
+Then, we could build a comprehensive one, it would save all the data into an array, and print out all the metrics in different situations. The function name is `compre_cal`.
+
+```{r}
+compre_cal <- function(pred, resp){
+  my_array <- array(NA, dim = c(3, 3, 9))
+  for(i in 1:9){
+    v <- (0.1)*i
+    my_array[,,i] <- conf_mat_free(pred, resp, value = v)
+  }
+  return(my_array)
+}
+```
+
+```{r}
+# Example
+array_demo <- compre_cal(pred=X, resp=Y)
+```
+
+Finally, we get an array of 3\*3\*9 dimension which stores all the confusion matrix in different situations. And we also print all the metrics in different situations. It is a comprehensive calculation.
+
+```{r}
+compre_cal_new <- function(pred, resp){
+  my_array <- array(NA, dim = c(3, 3, 9))
+  for(i in 1:9){
+    v <- (0.1)*i
+    my_array[,,i] <- conf_mat_new(pred, resp, value = v)
+  }
+  return(my_array)
+}
+```
+
+
+Now we create a function that could plot any metrics over a grid of cut-off values for prediction going from 0.1 to 0.9 with steps of 0.1. The function name is `plot_metric`. In the input of this function, we need to specify the output metric (`metric="Prevalence", "Accuracy", "Sensitivity", "Specificity", "False Discovery Rate", "Diagnostic Odds Ratio"`).
+
+```{r}
+plot_metric <- function(resp, pred, metric){
+  data_array <- compre_cal_new(pred, resp)
+  if(metric == "Prevalence"){
+    prevalence <- rep(0, 9)
+    step <- seq(0.1, 0.9, by = 0.1)
+    for(i in 1:9){
+      prevalence[i] <- (data_array[2,1,i]/data_array[1,1,i])
+    }
+    plot(prevalence~step, xlab="cut-off value"
+         , ylab="", main="Prevalence")
+  }
+  if(metric == "Accuracy"){
+    Accuracy <- rep(0, 9)
+    step <- seq(0.1, 0.9, by = 0.1)
+    for(i in 1:9){
+      Accuracy[i] <- ((data_array[2,2,i]+data_array[3,3,i])/data_array[1,1,i])
+    }
+    plot(Accuracy~step, xlab="cut-off value"
+         , ylab="", main="Accuracy")
+  }
+  if(metric == "Sensitivity"){
+    Sensitivity <- rep(0, 9)
+    step <- seq(0.1, 0.9, by = 0.1)
+    for(i in 1:9){
+      Sensitivity[i] <- (data_array[2,2,i]/data_array[2,1,i])
+    }
+    plot(Sensitivity~step, xlab="cut-off value"
+         , ylab="", main="Sensitivity")
+  }
+  if(metric == "Specificity"){
+    Specificity <- rep(0, 9)
+    step <- seq(0.1, 0.9, by = 0.1)
+    for(i in 1:9){
+      Specificity[i] <- (data_array[3,3,i]/data_array[3,1,i])
+    }
+    plot(Specificity~step, xlab="cut-off value"
+         , ylab="", main="Specificity")
+  }
+  if(metric == "The False Discovery Rate"){
+    The_False_Discovery_Rate <- rep(0, 9)
+    step <- seq(0.1, 0.9, by = 0.1)
+    for(i in 1:9){
+      The_False_Discovery_Rate[i] <- (data_array[3,2,i]/(data_array[3,2,i]+data_array[2,2,i]))
+    }
+    plot(The_False_Discovery_Rate~step, xlab="cut-off value"
+         , ylab="", main="The False Discovery Rate")
+  }
+  if(metric == "The Diagnostic Odds Ratio"){
+    The_Diagnostic_Odds_Ratio <- rep(0, 9)
+    step <- seq(0.1, 0.9, by = 0.1)
+    vec_1 <- rep(0,9)
+    vec_2 <- rep(0,9)
+    for(i in 1:9){
+      vec_1[i] <- (data_array[2,2,i]/data_array[2,1,i])/(data_array[3,2,i]/data_array[3,1,i])
+      vec_2[i] <- (data_array[2,3,i]/data_array[2,1,i])/(data_array[3,3,i]/data_array[3,1,i])
+      The_Diagnostic_Odds_Ratio[i] <- (vec_1[i]/vec_2[i])
+    }
+    plot(The_Diagnostic_Odds_Ratio~step, xlab="cut-off value"
+         , ylab="", main="The Diagnostic Odds Ratio")
+  }
+}
+```
+
+Now we can draw the plots.
+
+```{r}
+plot_metric(resp=Y, pred=X, metric = "Prevalence")
+plot_metric(resp=Y, pred=X, metric = "Accuracy")
+plot_metric(resp=Y, pred=X, metric = "Sensitivity")
+plot_metric(resp=Y, pred=X, metric = "Specificity")
+plot_metric(resp=Y, pred=X, metric = "The False Discovery Rate")
+plot_metric(resp=Y, pred=X, metric = "The Diagnostic Odds Ratio")
+```
+
