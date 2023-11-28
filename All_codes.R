@@ -147,12 +147,12 @@ log_plot <- function(pred, resp){
   optim_beta_demo <- optim(init_beta, 
                            fn=loss_value, pred=whole[,c(1:(c-2))], resp=whole[,(c-1)])$par
   
-  whole[,c] <- exp(-x_mat %*% optim_beta_demo)
+  whole[,c] <- x_mat %*% optim_beta_demo
   whole <- whole[order(whole[,c]),]
   plot(whole[,(c-1)] ~ whole[,c])
   aaa <- cbind(whole[,c] , whole[,(c-1)])
   aaa <- as.data.frame(aaa)
-  plot(aaa[,2]~aaa[,1], xlab="fitted value y_hat"
+  plot(aaa[,2]~aaa[,1], xlab="X%*%Beta"
        , ylab="binary response y")
   logistic_model <- glm(aaa[,2]~aaa[,1], data=aaa, 
                         family=binomial)
